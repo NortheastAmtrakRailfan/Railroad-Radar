@@ -1,0 +1,307 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>MBTA Train Map with Routes</title>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.7.1/dist/leaflet.css" />
+  <script src="https://unpkg.com/leaflet@1.7.1/dist/leaflet.js"></script>
+  <script src="https://unpkg.com/leaflet-rotatedmarker@0.2.0/leaflet.rotatedMarker.js"></script>
+  <style>
+    #map { height: 100vh; width: 100vw; margin: 0; padding: 0; }
+    html, body { height: 100%; margin: 0; }
+    .train-icon { display: block; transform-origin: center center; }
+  </style>
+</head>
+<body>
+  <div id="map"></div>
+  <script>
+    const map = L.map('map').setView([42.35, -71.08], 11); // Boston
+
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+      attribution: 'Map data © <a href="https://openstreetmap.org">OpenStreetMap</a> contributors',
+    }).addTo(map);
+
+    const mbtaAPIKey = '56faf0d5c1b246f982c52a944e271ff9';
+    const vehicleUrl = 'https://api-v3.mbta.com/vehicles?filter[route_type]=2&include=trip,route,stop';
+    const shapesUrl = 'https://api-v3.mbta.com/shapes?filter[route_type]=2&page[limit]=1000';
+
+    const markers = {};
+    const trainPositions = {};
+    const trainLastSeen = {};
+
+    function calculateBearing(lat1, lon1, lat2, lon2) {
+      const toRad = deg => deg * Math.PI / 180;
+      const toDeg = rad => rad * 180 / Math.PI;
+      lat1 = toRad(lat1); lon1 = toRad(lon1);
+      lat2 = toRad(lat2); lon2 = toRad(lon2);
+      const dLon = lon2 - lon1;
+      const y = Math.sin(dLon) * Math.cos(lat2);
+      const x = Math.cos(lat1) * Math.sin(lat2) - Math.sin(lat1) * Math.cos(lat2) * Math.cos(dLon);
+      return (toDeg(Math.atan2(y, x)) + 360) % 360;
+    }
+
+    function createTrainIcon(delayMinutes) {
+      let iconUrl;
+      if (delayMinutes === null || delayMinutes === undefined || delayMinutes <= 5) {
+        iconUrl = 'https://iili.io/3l1ouDP.png'; // Green
+      } else if (delayMinutes > 5 && delayMinutes <= 15) {
+        iconUrl = 'https://iili.io/3l1oRx1.png'; // Yellow
+      } else {
+        iconUrl = 'https://iili.io/3l1oTOB.png'; // Red
+      }
+      return L.icon({
+        iconUrl,
+        iconSize: [32, 32],
+        iconAnchor: [16, 16],
+        popupAnchor: [0, -16],
+        className: 'train-icon'
+      });
+    }
+
+    async function getOnTimeStatus(tripIds, stopIds) {
+      if (!tripIds.length) return {};
+      const predictionsUrl = `https://api-v3.mbta.com/predictions?filter[trip]=${tripIds.join(',')}&include=schedule`;
+      try {
+        const response = await fetch(predictionsUrl, {
+          headers: { 'x-api-key': mbtaAPIKey }
+        });
+        const data = await response.json();
+        const onTimeStatus = {};
+
+        data.data.forEach(prediction => {
+          const tripId = prediction.relationships.trip.data.id;
+          const stopId = prediction.relationships.stop.data.id;
+          const key = `${tripId}-${stopId}`;
+          const predictedArrival = prediction.attributes.arrival_time;
+          let delayMinutes = null;
+          let status = "Unknown";
+          let scheduledArrival = null;
+
+          if (predictedArrival && data.included) {
+            const schedule = data.included.find(item =>
+              item.type === "schedule" &&
+              item.relationships.trip.data.id === tripId &&
+              item.relationships.stop.data.id === stopId
+            );
+            if (schedule) {
+              scheduledArrival = schedule.attributes.arrival_time;
+              if (scheduledArrival) {
+                const predictedTime = new Date(predictedArrival);
+                const scheduledTime = new Date(scheduledArrival);
+                const diffMinutes = (predictedTime - scheduledTime) / (1000 * 60);
+                delayMinutes = diffMinutes;
+                if (Math.abs(diffMinutes) <= 5) {
+                  status = "On Time";
+                } else if (diffMinutes > 5) {
+                  status = `Delayed (${Math.round(diffMinutes)} min)`;
+                } else {
+                  status = `Early (${Math.round(-diffMinutes)} min)`;
+                }
+              }
+            }
+          }
+
+          onTimeStatus[key] = {
+            status,
+            delayMinutes,
+            scheduledArrival,
+            predictedArrival
+          };
+        });
+
+        return onTimeStatus;
+      } catch (error) {
+        console.error('Error fetching predictions:', error);
+        return {};
+      }
+    }
+
+    async function getTripStopTimes(tripId, nextStopId) {
+      const predictionsUrl = `https://api-v3.mbta.com/predictions?filter[trip]=${tripId}&include=stop&sort=stop_sequence`;
+      try {
+        const response = await fetch(predictionsUrl, {
+          headers: { 'x-api-key': mbtaAPIKey }
+        });
+        const data = await response.json();
+
+        const stopTimeList = [];
+
+        data.data.forEach(prediction => {
+          const stopId = prediction.relationships.stop.data.id;
+          const stop = data.included.find(item => item.id === stopId && item.type === "stop");
+          const stopName = stop?.attributes?.name || "Unknown Stop";
+          const arrival = prediction.attributes.arrival_time;
+          const departure = prediction.attributes.departure_time;
+          const timeToUse = arrival || departure;
+          const formatted = timeToUse
+            ? new Date(timeToUse).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+            : "N/A";
+          const isNext = stopId === nextStopId;
+
+          stopTimeList.push({
+            stopName,
+            time: formatted,
+            isNext
+          });
+        });
+
+        return stopTimeList;
+      } catch (error) {
+        console.error("Error fetching trip stop times:", error);
+        return [];
+      }
+    }
+
+    function updateTrains() {
+      fetch(vehicleUrl, { headers: { 'x-api-key': mbtaAPIKey } })
+        .then(response => response.json())
+        .then(async data => {
+          const trips = {}, routes = {}, stops = {};
+          if (data.included) {
+            data.included.forEach(item => {
+              if (item.type === "trip") trips[item.id] = item;
+              if (item.type === "route") routes[item.id] = item;
+              if (item.type === "stop") stops[item.id] = item;
+            });
+          }
+
+          const tripIds = [];
+          const stopIds = {};
+          data.data.forEach(train => {
+            const tripId = train.relationships?.trip?.data?.id;
+            const stopId = train.relationships?.stop?.data?.id;
+            if (tripId && stopId && train.attributes.current_status.includes("TO")) {
+              tripIds.push(tripId);
+              stopIds[tripId] = stopId;
+            }
+          });
+
+          const onTimeStatus = await getOnTimeStatus(tripIds, stopIds);
+          const activeMarkers = {};
+          const currentTime = Date.now();
+
+          for (const train of data.data) {
+            const { latitude, longitude, current_status, speed, direction_id, updated_at } = train.attributes;
+            const id = train.id;
+            const tripId = train.relationships?.trip?.data?.id;
+            const routeId = train.relationships?.route?.data?.id;
+            const stopId = train.relationships?.stop?.data?.id;
+            const route = routes[routeId];
+            const direction = direction_id === 0 ? "Outbound" : "Inbound";
+            const mph = speed != null ? (speed * 2.23694).toFixed(1) + " mph" : "N/A";
+            const routeName = route?.attributes?.long_name || "Unknown Route";
+            const tripNumber = tripId ? tripId.split('-').pop() : "Unknown";
+            const updatedAt = updated_at ? new Date(updated_at).toLocaleString() : "Unknown";
+            const statusKey = `${tripId}-${stopId}`;
+            const onTimeInfo = current_status.includes("TO") ? (onTimeStatus[statusKey] || { status: "Unknown", delayMinutes: null }) : { status: "N/A", delayMinutes: null };
+            const delayMinutes = onTimeInfo.delayMinutes;
+            const onTime = onTimeInfo.status;
+
+            let nextStation = "Unknown";
+            if (current_status.includes("TO") && stopId && stops[stopId]) {
+              nextStation = stops[stopId].attributes.name;
+            }
+
+            let statusText = current_status;
+            if (current_status === "IN_TRANSIT_TO") statusText = "On the way to";
+            else if (current_status === "STOPPED_AT") statusText = "Stopped at";
+
+            const destination = trips[tripId]?.attributes?.headsign || "Unknown";
+            const stopList = await getTripStopTimes(tripId, stopId);
+            let stopListHTML = "<b>Upcoming Stops:</b><br><ul style='padding-left: 20px'>";
+            stopList.forEach(stop => {
+              if (stop.isNext) {
+                stopListHTML += `<li><b>${stop.stopName}: ${stop.time}</b></li>`;
+              } else {
+                stopListHTML += `<li>${stop.stopName}: ${stop.time}</li>`;
+              }
+            });
+            stopListHTML += "</ul>";
+
+            if (latitude && longitude) {
+              const popupContent = `
+                <b>${routeName}</b><br>
+                Destination: ${destination}<br>
+                Reporting Vehicle: ${id}<br>
+                Trip Number: ${tripNumber}<br>
+                Status: ${statusText}${current_status.includes("TO") ? ` ${nextStation}` : ""}<br>
+                On Time: ${onTime}<br>
+                Scheduled Arrival: ${onTimeInfo.scheduledArrival ? new Date(onTimeInfo.scheduledArrival).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : "N/A"}<br>
+                Estimated Arrival: ${onTimeInfo.predictedArrival ? new Date(onTimeInfo.predictedArrival).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : "N/A"}<br>
+                Direction: ${direction}<br>
+                Speed: ${mph}<br>
+                Updated At: ${updatedAt}<br><br>
+                ${stopListHTML}
+              `;
+
+              let rotationAngle = 0;
+              if (trainPositions[id]) {
+                const prev = trainPositions[id];
+                const bearing = calculateBearing(prev.latitude, prev.longitude, latitude, longitude);
+                if (!isNaN(bearing)) rotationAngle = bearing;
+              }
+
+              trainPositions[id] = { latitude, longitude };
+              trainLastSeen[id] = currentTime;
+
+              if (markers[id]) {
+                markers[id].setLatLng([latitude, longitude]);
+                markers[id].setRotationAngle(rotationAngle);
+                markers[id].setIcon(createTrainIcon(delayMinutes));
+                markers[id].setPopupContent(popupContent);
+              } else {
+                const marker = L.marker([latitude, longitude], {
+                  icon: createTrainIcon(delayMinutes),
+                  rotationAngle,
+                  rotationOrigin: 'center center'
+                }).addTo(map).bindPopup(popupContent);
+                markers[id] = marker;
+              }
+
+              activeMarkers[id] = true;
+            }
+          }
+
+          for (const id in markers) {
+            if (!activeMarkers[id]) {
+              const timeSinceLastSeen = currentTime - (trainLastSeen[id] || 0);
+              if (timeSinceLastSeen > 60000) {
+                map.removeLayer(markers[id]);
+                delete markers[id];
+                delete trainPositions[id];
+                delete trainLastSeen[id];
+              }
+            }
+          }
+
+          map._onResize();
+        })
+        .catch(error => console.error('Error fetching vehicle data:', error));
+    }
+
+    function drawShapes() {
+      fetch(shapesUrl, {
+        headers: { 'x-api-key': mbtaAPIKey }
+      })
+      .then(response => response.json())
+      .then(data => {
+        const shapes = {};
+        data.data.forEach(shape => {
+          const id = shape.id;
+          if (!shapes[id]) shapes[id] = [];
+          shapes[id].push([shape.attributes.latitude, shape.attributes.longitude]);
+        });
+        Object.values(shapes).forEach(shapeCoords => {
+          L.polyline(shapeCoords, { color: 'purple', weight: 3 }).addTo(map);
+        });
+      })
+      .catch(error => console.error('Error fetching shapes data:', error));
+    }
+
+    updateTrains();
+    setInterval(updateTrains, 30000); // Every 30s
+    drawShapes(); // Load once
+  </script>
+</body>
+</html>
