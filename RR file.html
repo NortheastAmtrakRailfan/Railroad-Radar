@@ -1,0 +1,2131 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>Stay Off The Tracks</title>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.7.1/dist/leaflet.css" />
+  <script src="https://unpkg.com/leaflet@1.7.1/dist/leaflet.js"></script>
+  <script src="https://unpkg.com/leaflet-rotatedmarker@0.2.0/leaflet.rotatedMarker.js"></script>
+  <style>
+    :root {
+      --primary-color: #0c2340; /* Dark blue from logo */
+      --secondary-color: #0c2340; /* Changed from red to dark blue */
+      --accent-color: #f1f2f2; /* Light gray from logo */
+      --text-color: #333;
+      --light-text: #fff;
+      --border-radius: 8px;
+    }
+    
+    html, body { 
+      height: 100%; 
+      margin: 0; 
+      font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+      background-color: var(--accent-color);
+    }
+    
+    #map { 
+      height: calc(100vh - 60px); 
+      width: 100%; 
+      margin: 0; 
+      padding: 0; 
+      margin-top: 60px;
+      z-index: 1;
+    }
+    
+    .header {
+      position: fixed !important;
+      top: 0 !important;
+      left: 0 !important;
+      right: 0 !important;
+      width: 100% !important;
+      height: 60px;
+      background-color: var(--primary-color);
+      display: flex;
+      align-items: center;
+      padding: 0 10px;
+      z-index: 9999 !important;
+      box-shadow: 0 2px 10px rgba(0,0,0,0.2);
+    }
+    
+    .header-logo {
+      height: 40px;
+      margin-right: 10px;
+    }
+    
+    .header-search-container {
+      flex-grow: 1;
+      display: flex;
+      align-items: center;
+      margin: 0 10px;
+      position: relative;
+    }
+    
+    .header-search-input {
+      width: 100%;
+      padding: 8px 12px;
+      border: none;
+      border-radius: 20px;
+      font-size: 14px;
+      background-color: rgba(255, 255, 255, 0.9);
+    }
+    
+    .header-search-results {
+      position: absolute;
+      top: 100%;
+      left: 0;
+      right: 0;
+      background-color: white;
+      border-radius: 0 0 8px 8px;
+      box-shadow: 0 4px 8px rgba(0,0,0,0.2);
+      max-height: 300px;
+      overflow-y: auto;
+      z-index: 10000;
+      display: none;
+    }
+    
+    .header-search-results.active {
+      display: block;
+    }
+    
+.menu-button {
+  background: none;
+  border: none;
+  color: white;
+  font-size: 24px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  margin-left: 8px; /* Move menu just a tiny bit to the left */
+  width: 40px;
+  height: 40px;
+  transition: margin-left 0.2s;
+}
+    
+    .control-panel {
+      position: fixed;
+      top: 60px;
+      right: 0;
+      bottom: 0;
+      width: 300px;
+      background-color: white;
+      z-index: 1000;
+      box-shadow: -2px 0 10px rgba(0,0,0,0.2);
+      overflow-y: auto;
+      transform: translateX(100%);
+      transition: transform 0.3s ease;
+      padding: 20px;
+    }
+    
+    .control-panel.open {
+      transform: translateX(0);
+    }
+    
+    .control-panel h2 {
+      color: var(--primary-color);
+      margin-top: 0;
+      border-bottom: 2px solid var(--secondary-color);
+      padding-bottom: 10px;
+    }
+    
+    .close-panel {
+      position: absolute;
+      top: 10px;
+      right: 10px;
+      background: none;
+      border: none;
+      font-size: 24px;
+      cursor: pointer;
+      color: var(--primary-color);
+    }
+    
+    .train-icon { 
+      display: block; 
+      transform-origin: center center; 
+    }
+    
+    .route-toggle {
+      display: flex;
+      align-items: center;
+      margin-bottom: 8px;
+    }
+    
+    .route-toggle input {
+      margin-right: 8px;
+    }
+    
+    .route-color {
+      display: inline-block;
+      width: 16px;
+      height: 16px;
+      border-radius: 50%;
+      margin-right: 8px;
+    }
+    
+    .legend {
+      margin-top: 15px;
+      padding-top: 15px;
+      border-top: 1px solid #eee;
+    }
+    
+    .legend-item {
+      display: flex;
+      align-items: center;
+      margin-bottom: 8px;
+    }
+    
+    .legend-icon {
+      width: 24px;
+      height: 24px;
+      margin-right: 10px;
+    }
+    
+    .train-popup {
+      font-size: 14px;
+      min-width: 280px;
+    }
+    
+    .train-popup h3 {
+      margin: 0 0 8px 0;
+      font-size: 16px;
+      border-bottom: 2px solid var(--secondary-color);
+      padding-bottom: 8px;
+      color: var(--primary-color);
+    }
+    
+    .train-popup p {
+      margin: 4px 0;
+    }
+    
+    .status-on-time {
+      color: #2ecc71;
+      font-weight: bold;
+    }
+    
+    .status-delayed {
+      color: #f39c12;
+      font-weight: bold;
+    }
+    
+    .status-very-delayed {
+      color: #e74c3c;
+      font-weight: bold;
+    }
+    
+    .refresh-button {
+      background-color: var(--secondary-color);
+      color: white;
+      border: none;
+      padding: 8px 12px;
+      border-radius: 4px;
+      cursor: pointer;
+      margin-top: 10px;
+      font-weight: bold;
+      transition: background-color 0.2s;
+      width: 100%;
+    }
+    
+    .refresh-button:hover {
+      background-color: #0a1c30;
+    }
+    
+    .last-updated {
+      font-size: 12px;
+      color: #666;
+      margin-top: 8px;
+      text-align: center;
+    }
+    
+    .loading {
+      display: inline-block;
+      width: 16px;
+      height: 16px;
+      border: 2px solid rgba(0,0,0,0.1);
+      border-top-color: var(--secondary-color);
+      border-radius: 50%;
+      animation: spin 1s linear infinite;
+      margin-left: 8px;
+      vertical-align: middle;
+    }
+    
+    @keyframes spin {
+      to { transform: rotate(360deg); }
+    }
+    
+    .route-header {
+      font-weight: bold;
+      margin-bottom: 10px;
+      color: var(--primary-color);
+    }
+    
+    .search-container {
+      margin-bottom: 15px;
+      padding-bottom: 15px;
+      border-bottom: 1px solid #eee;
+    }
+    
+    .search-input {
+      width: 100%;
+      padding: 8px;
+      border: 1px solid var(--primary-color);
+      border-radius: 4px;
+      margin-bottom: 8px;
+      box-sizing: border-box;
+    }
+    
+    .search-results {
+      max-height: 200px;
+      overflow-y: auto;
+      margin-top: 10px;
+      border: 1px solid #eee;
+      border-radius: 4px;
+    }
+    
+    .search-result {
+      padding: 8px;
+      cursor: pointer;
+      border-bottom: 1px solid #eee;
+      transition: background-color 0.2s;
+    }
+    
+    .search-result:hover {
+      background-color: #f5f5f5;
+    }
+    
+    .search-result-title {
+      font-weight: bold;
+      margin-bottom: 2px;
+      color: var(--primary-color);
+    }
+    
+    .search-result-subtitle {
+      font-size: 12px;
+      color: #666;
+    }
+    
+    .search-type-toggle {
+      display: flex;
+      margin-bottom: 8px;
+    }
+    
+    .search-type-toggle label {
+      margin-right: 10px;
+      display: flex;
+      align-items: center;
+      cursor: pointer;
+    }
+    
+    .search-type-toggle input {
+      margin-right: 4px;
+    }
+    
+    
+    .station-toggle {
+      display: flex;
+      align-items: center;
+      margin-top: 15px;
+      padding-top: 15px;
+      border-top: 1px solid #eee;
+    }
+    
+    .station-toggle input {
+      margin-right: 8px;
+    }
+    
+    .station-toggle label {
+      cursor: pointer;
+    }
+    
+    .station-icon {
+      width: 24px;
+      height: 24px;
+      margin-right: 8px;
+    }
+    
+    .toggle-section {
+      margin-top: 15px;
+      padding-top: 15px;
+      border-top: 1px solid #eee;
+    }
+    
+    .overlay {
+      position: fixed;
+      top: 0;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      background-color: rgba(0,0,0,0.5);
+      z-index: 999;
+      display: none;
+    }
+    
+    .overlay.open {
+      display: block;
+    }
+    
+    /* Styles for station popup */
+    .station-popup {
+      font-size: 14px;
+      min-width: 280px;
+    }
+    
+    .station-popup h3 {
+      margin: 0 0 8px 0;
+      font-size: 16px;
+      border-bottom: 2px solid var(--secondary-color);
+      padding-bottom: 8px;
+      color: var(--primary-color);
+    }
+    
+    .departures-list {
+      list-style: none;
+      padding: 0;
+      margin: 0;
+    }
+    
+    .departures-list li {
+      display: flex;
+      justify-content: space-between;
+      padding: 4px 0;
+      border-bottom: 1px solid #eee;
+      align-items: center;
+    }
+    
+    .departure-time {
+      font-weight: bold;
+      min-width: 60px;
+    }
+    
+    .departure-destination {
+      flex-grow: 1;
+      margin: 0 10px;
+    }
+    
+    .stops-list {
+      list-style: none;
+      padding: 0;
+      margin: 0;
+    }
+    
+    .stops-list li {
+      display: flex;
+      justify-content: space-between;
+      padding: 4px 0;
+      border-bottom: 1px solid #eee;
+    }
+    
+    .stop-time {
+      font-weight: bold;
+      min-width: 60px;
+    }
+    
+    .stop-name {
+      flex-grow: 1;
+      margin: 0 10px;
+    }
+    
+    .more-stops {
+      text-align: center;
+      font-style: italic;
+      color: #666;
+      margin-top: 5px;
+    }
+    
+    .loading-departures {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 20px;
+    }
+    
+    .loading-spinner {
+      display: inline-block;
+      width: 20px;
+      height: 20px;
+      border: 2px solid rgba(0,0,0,0.1);
+      border-top-color: var(--secondary-color);
+      border-radius: 50%;
+      animation: spin 1s linear infinite;
+      margin-right: 10px;
+    }
+    
+    .no-departures {
+      text-align: center;
+      padding: 10px;
+      color: #666;
+      font-style: italic;
+    }
+    
+    .live-train-icon {
+      width: 16px;
+      height: 16px;
+      margin-right: 5px;
+      vertical-align: middle;
+    }
+    
+    .live-indicator {
+      display: flex;
+      align-items: center;
+      margin-left: 5px;
+    }
+    
+    .station-badge {
+      display: inline-block;
+      background-color: var(--primary-color);
+      color: white;
+      font-size: 11px;
+      padding: 2px 6px;
+      border-radius: 10px;
+      margin-left: 5px;
+    }
+    
+    .search-type-indicator {
+      position: absolute;
+      right: 10px;
+      top: 50%;
+      transform: translateY(-50%);
+      background-color: var(--primary-color);
+      color: white;
+      font-size: 11px;
+      padding: 2px 6px;
+      border-radius: 10px;
+      cursor: pointer;
+    }
+    
+    .track-badge {
+      display: inline-block;
+      background-color: #0c2340;
+      color: white;
+      font-size: 11px;
+      padding: 2px 6px;
+      border-radius: 10px;
+      margin-left: 5px;
+    }
+    
+    /* Responsive styles */
+    @media (max-width: 768px) {
+      .control-panel {
+        width: 85%;
+      }
+      
+      .header-logo {
+        height: 30px;
+      }
+      
+      .header-search-container {
+        margin: 0 5px;
+      }
+    }
+    
+    @media (max-width: 480px) {
+      .header-search-container {
+        max-width: 60%;
+      }
+    }
+      .leaflet-popup-content {
+    max-height: 350px;
+    overflow-y: auto;
+  }
+</style>
+</head>
+<body>
+  <div class="header">
+    <img src="https://i.postimg.cc/W18XKxcx/Stay-Off-The-Tracks-5.png" alt="Stay Off The Tracks Logo" class="header-logo">
+    
+    <div class="header-search-container">
+      <input type="text" id="header-search-input" class="header-search-input" placeholder="Search trains or stations...">
+      <div class="search-type-indicator" id="search-type-toggle">Trains</div>
+      <div id="header-search-results" class="header-search-results"></div>
+    </div>
+    
+    <button class="menu-button" id="menu-button">
+      <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <line x1="3" y1="12" x2="21" y2="12"></line>
+        <line x1="3" y1="6" x2="21" y2="6"></line>
+        <line x1="3" y1="18" x2="21" y2="18"></line>
+      </svg>
+    </button>
+  </div>
+  
+  <div id="map"></div>
+  
+  <div class="overlay" id="overlay"></div>
+  
+  <div class="control-panel" id="control-panel">
+    <button class="close-panel" id="close-panel">×</button>
+    <h2>Train Tracker</h2>
+    
+    <div id="route-toggles">
+      <div class="route-header">Routes</div>
+      <div class="loading" id="routes-loading"></div>
+    </div>
+    
+    <div class="toggle-section">
+      <div class="station-toggle">
+        <input type="checkbox" id="show-stations" checked>
+        <img src="https://i.postimg.cc/gjwV0kj6/Needham-Heights-1.png" class="station-icon" alt="Station">
+        <label for="show-stations">Show Stations</label>
+      </div>
+    </div>
+    
+    <div class="legend">
+      <div class="route-header">Train Status</div>
+      <div class="legend-item">
+        <img src="https://iili.io/3l1ouDP.png" class="legend-icon" alt="On time">
+        <span>On time (0-5 min delay)</span>
+      </div>
+      <div class="legend-item">
+        <img src="https://iili.io/3l1oRx1.png" class="legend-icon" alt="Delayed">
+        <span>Delayed (5-15 min)</span>
+      </div>
+      <div class="legend-item">
+        <img src="https://iili.io/3l1oTOB.png" class="legend-icon" alt="Very delayed">
+        <span>Very delayed (>15 min)</span>
+      </div>
+      <div class="legend-item">
+        <img src="https://i.postimg.cc/8PdC8gPp/Needham-Heights-2.png" class="legend-icon" alt="Live train">
+        <span>Live train data available</span>
+      </div>
+    </div>
+    <button id="refresh-button" class="refresh-button">Refresh Data</button>
+    <div id="last-updated" class="last-updated">Last updated: Never</div>
+  </div>
+
+  <script>
+    // Initialize map
+    const map = L.map('map').setView([42.35, -71.08], 11); // Boston
+
+function addUserLocationToMap() {
+  if (!navigator.geolocation) return;
+
+  navigator.geolocation.getCurrentPosition(function(position) {
+    const userLat = position.coords.latitude;
+    const userLng = position.coords.longitude;
+
+    const userMarker = L.marker([userLat, userLng], {
+      icon: L.icon({
+        iconUrl: "https://cdn-icons-png.flaticon.com/512/61/61168.png", // blue dot
+        iconSize: [32, 32],
+        iconAnchor: [16, 32],
+      }),
+      zIndexOffset: 2000
+    }).addTo(map);
+
+    userMarker.bindPopup("You are here").openPopup();
+    // Optionally: map.setView([userLat, userLng], 13);
+  });
+}
+
+
+    // Add tile layer
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+      attribution: 'Map data © <a href="https://openstreetmap.org">OpenStreetMap</a> contributors',
+      maxZoom: 19
+    }).addTo(map);
+
+    // Menu toggle functionality
+    const menuButton = document.getElementById('menu-button');
+    const closePanel = document.getElementById('close-panel');
+    const controlPanel = document.getElementById('control-panel');
+    const overlay = document.getElementById('overlay');
+
+    menuButton.addEventListener('click', () => {
+      controlPanel.classList.add('open');
+      overlay.classList.add('open');
+    });
+
+    closePanel.addEventListener('click', () => {
+      controlPanel.classList.remove('open');
+      overlay.classList.remove('open');
+    });
+
+    overlay.addEventListener('click', () => {
+      controlPanel.classList.remove('open');
+      overlay.classList.remove('open');
+    });
+
+    // MBTA API variables
+    const mbtaAPIKey = '56faf0d5c1b246f982c52a944e271ff9';
+    const vehicleUrl = 'https://api-v3.mbta.com/vehicles?filter[route_type]=2&include=trip,route,stop';
+    const shapesUrl = 'https://api-v3.mbta.com/shapes?filter[route_type]=2&page[limit]=1000';
+    const routesUrl = 'https://api-v3.mbta.com/routes?filter[type]=2';
+    const stopsUrl = 'https://api-v3.mbta.com/stops?filter[route_type]=2&include=route';
+    const scheduleUrl = 'https://api-v3.mbta.com/schedules';
+    const predictionsUrl = 'https://api-v3.mbta.com/predictions';
+
+    // Data storage
+    const markers = {};
+    const trainPositions = {};
+    const trainLastSeen = {};
+    const routeLines = {};
+    const enabledRoutes = {};
+    const routeColors = {};
+    const stationMarkers = {};
+    const trainInfo = {};
+    const stationInfo = {};
+    const upcomingStopsCache = {};
+    const stationDeparturesCache = {};
+    const liveTrainTrips = new Set(); // Store trip IDs of live trains
+    const stationsByName = {}; // Group stations by name
+    
+    let highlightedMarker = null;
+    let highlightedStation = null;
+    let showStations = true;
+    let searchType = 'train'; // Default search type
+
+    // Helper functions
+    function calculateBearing(lat1, lon1, lat2, lon2) {
+      const toRad = deg => deg * Math.PI / 180;
+      const toDeg = rad => rad * 180 / Math.PI;
+      lat1 = toRad(lat1); lon1 = toRad(lon1);
+      lat2 = toRad(lat2); lon2 = toRad(lon2);
+      const dLon = lon2 - lon1;
+      const y = Math.sin(dLon) * Math.cos(lat2);
+      const x = Math.cos(lat1) * Math.sin(lat2) - Math.sin(lat1) * Math.cos(lat2) * Math.cos(dLon);
+      return (toDeg(Math.atan2(y, x)) + 360) % 360;
+    }
+
+    function createTrainIcon(delayMinutes) {
+      let iconUrl;
+      if (delayMinutes === null || delayMinutes === undefined || delayMinutes <= 5) {
+        iconUrl = 'https://iili.io/3l1ouDP.png'; // Green
+      } else if (delayMinutes > 5 && delayMinutes <= 15) {
+        iconUrl = 'https://iili.io/3l1oRx1.png'; // Yellow
+      } else {
+        iconUrl = 'https://iili.io/3l1oTOB.png'; // Red
+      }
+      return L.icon({
+        iconUrl,
+        iconSize: [32, 32],
+        iconAnchor: [16, 16],
+        popupAnchor: [0, -16],
+        className: 'train-icon'
+      });
+    }
+
+    function createStationIcon() {
+      return L.icon({
+        iconUrl: 'https://i.postimg.cc/gjwV0kj6/Needham-Heights-1.png',
+        iconSize: [24, 24],
+        iconAnchor: [12, 12],
+        popupAnchor: [0, -12]
+      });
+    }
+
+    // Extract track number from platform name or description
+    function extractTrackNumber(platformName, platformDesc) {
+      // First check if we have a platform description that contains track info
+      if (platformDesc) {
+        const trackMatch = platformDesc.match(/track\s+(\d+)/i) || 
+                          platformDesc.match(/platform\s+(\d+)/i);
+        if (trackMatch) return trackMatch[1];
+      }
+      
+      // Then check the platform name for track/platform numbers
+      if (platformName) {
+        // Look for patterns like "Track 1", "Platform 2", etc.
+        const trackMatch = platformName.match(/track\s+(\d+)/i) || 
+                          platformName.match(/platform\s+(\d+)/i);
+        if (trackMatch) return trackMatch[1];
+        
+        // Look for patterns like "North Station-01", "South Station-05", etc.
+        const suffixMatch = platformName.match(/-(\d+)$/);
+        if (suffixMatch) return suffixMatch[1];
+        
+        // Look for patterns where the track number is at the end, like "North Station 1"
+        const endNumberMatch = platformName.match(/\s(\d+)$/);
+        if (endNumberMatch) return endNumberMatch[1];
+      }
+      
+      return null;
+    }
+
+    // API functions
+    async function getOnTimeStatus(tripIds, stopIds) {
+      if (!tripIds.length) return {};
+      const predictionsUrl = `https://api-v3.mbta.com/predictions?filter[trip]=${tripIds.join(',')}&include=schedule`;
+      try {
+        const response = await fetch(predictionsUrl, {
+          headers: { 'x-api-key': mbtaAPIKey }
+        });
+        const data = await response.json();
+        const onTimeStatus = {};
+
+        // Clear the live train trips set before repopulating
+        liveTrainTrips.clear();
+
+        data.data.forEach(prediction => {
+          const tripId = prediction.relationships.trip.data.id;
+          const stopId = prediction.relationships.stop.data.id;
+          const key = `${tripId}-${stopId}`;
+          const predictedArrival = prediction.attributes.arrival_time;
+          let delayMinutes = null;
+          let status = "Unknown";
+          let scheduledArrival = null;
+
+          // Add this trip to the live trains set
+          liveTrainTrips.add(tripId);
+
+          if (predictedArrival && data.included) {
+            const schedule = data.included.find(item =>
+              item.type === "schedule" &&
+              item.relationships.trip.data.id === tripId &&
+              item.relationships.stop.data.id === stopId
+            );
+            if (schedule) {
+              scheduledArrival = schedule.attributes.arrival_time;
+              if (scheduledArrival) {
+                const predictedTime = new Date(predictedArrival);
+                const scheduledTime = new Date(scheduledArrival);
+                const diffMinutes = (predictedTime - scheduledTime) / (1000 * 60);
+                delayMinutes = diffMinutes;
+                if (Math.abs(diffMinutes) <= 5) {
+                  status = "On Time";
+                } else if (diffMinutes > 5) {
+                  status = `Delayed ${Math.round(diffMinutes)} minutes`;
+                } else {
+                  status = `Early ${Math.round(Math.abs(diffMinutes))} minutes`;
+                }
+              }
+            }
+          }
+
+          onTimeStatus[tripId] = {
+            delayMinutes,
+            status,
+            scheduledArrival,
+            predictedArrival,
+            isLive: true
+          };
+        });
+
+        return onTimeStatus;
+      } catch (error) {
+        console.error("Error fetching predictions:", error);
+        return {};
+      }
+    }
+
+    async function getUpcomingStops(tripId) {
+      // Check cache first
+      if (upcomingStopsCache[tripId] && 
+          (Date.now() - upcomingStopsCache[tripId].timestamp) < 5 * 60 * 1000) {
+        return upcomingStopsCache[tripId].stops;
+      }
+      
+      try {
+        // Get both schedules and predictions for this trip
+        const scheduleUrl = `https://api-v3.mbta.com/schedules?filter[trip]=${tripId}&include=stop`;
+        const predictionsUrl = `https://api-v3.mbta.com/predictions?filter[trip]=${tripId}`;
+        
+        const [scheduleResponse, predictionsResponse] = await Promise.all([
+          fetch(scheduleUrl, { headers: { 'x-api-key': mbtaAPIKey } }),
+          fetch(predictionsUrl, { headers: { 'x-api-key': mbtaAPIKey } })
+        ]);
+        
+        const scheduleData = await scheduleResponse.json();
+        const predictionsData = await predictionsResponse.json();
+        
+        const stops = [];
+        const now = new Date();
+        
+        // Process schedules and sort by arrival time
+        if (scheduleData.data && scheduleData.data.length > 0) {
+          // Get all stops and their info first
+          const allSchedules = scheduleData.data.map(schedule => {
+            const stopId = schedule.relationships.stop.data.id;
+            const stopInfo = scheduleData.included.find(item => 
+              item.type === "stop" && item.id === stopId
+            );
+            
+            const scheduledArrival = schedule.attributes.arrival_time ? 
+              new Date(schedule.attributes.arrival_time) : null;
+            
+            // Find prediction for this stop
+            const prediction = predictionsData.data.find(p => 
+              p.relationships.stop.data.id === stopId
+            );
+            
+            let predictedArrival = null;
+            let delayMinutes = null;
+            let delayStatus = "On Time";
+            let isLive = false;
+            
+            if (prediction && prediction.attributes.arrival_time) {
+              predictedArrival = new Date(prediction.attributes.arrival_time);
+              isLive = true;
+              
+              if (scheduledArrival) {
+                delayMinutes = (predictedArrival - scheduledArrival) / (1000 * 60);
+                
+                if (Math.abs(delayMinutes) <= 5) {
+                  delayStatus = "On Time";
+                } else if (delayMinutes > 0) {
+                  delayStatus = `Now ${predictedArrival.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}`;
+                } else {
+                  delayStatus = `Early (${predictedArrival.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})})`;
+                }
+              }
+            }
+            
+            // Extract track number if available
+            let trackNumber = null;
+            if (stopInfo && stopInfo.attributes) {
+              trackNumber = extractTrackNumber(
+                stopInfo.attributes.name,
+                stopInfo.attributes.description
+              );
+            }
+            
+            return {
+              id: stopId,
+              name: stopInfo ? stopInfo.attributes.name : "Unknown Stop",
+              scheduledArrival: scheduledArrival,
+              predictedArrival: predictedArrival,
+              delayMinutes: delayMinutes,
+              delayStatus: delayStatus,
+              isLive: isLive,
+              trackNumber: trackNumber,
+              formattedScheduledTime: scheduledArrival ? 
+                scheduledArrival.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'}) : "Unknown"
+            };
+          });
+          
+          // Filter to only future stops - using PREDICTED time if available, otherwise scheduled time
+          const futureStops = allSchedules.filter(stop => {
+            // If we have a predicted time, use that to determine if the stop is in the future
+            if (stop.predictedArrival) {
+              return stop.predictedArrival > now;
+            }
+            // Otherwise use scheduled time
+            else if (stop.scheduledArrival) {
+              return stop.scheduledArrival > now;
+            }
+            return false;
+          });
+          
+          // Sort by arrival time (predicted if available, otherwise scheduled)
+          futureStops.sort((a, b) => {
+            const timeA = a.predictedArrival || a.scheduledArrival;
+            const timeB = b.predictedArrival || b.scheduledArrival;
+            return timeA - timeB;
+          });
+          
+          stops.push(...futureStops);
+        }
+        
+        // Cache the results
+        upcomingStopsCache[tripId] = {
+          stops: stops,
+          timestamp: Date.now()
+        };
+        
+        return stops;
+      } catch (error) {
+        console.error("Error fetching upcoming stops:", error);
+        return [];
+      }
+    }
+
+    async function getStationDepartures(stationIds) {
+      // If stationIds is a string, convert it to an array
+      if (!Array.isArray(stationIds)) {
+        stationIds = [stationIds];
+      }
+      
+      // Generate a cache key for this group of stations
+      const cacheKey = stationIds.sort().join('-');
+      
+      // Check cache first
+      if (stationDeparturesCache[cacheKey] && 
+          (Date.now() - stationDeparturesCache[cacheKey].timestamp) < 5 * 60 * 1000) {
+        return stationDeparturesCache[cacheKey].departures;
+      }
+      
+      try {
+        // Get predictions for these stations
+        const predictionsUrl = `https://api-v3.mbta.com/predictions?filter[stop]=${stationIds.join(',')}&include=trip,route,schedule,stop&sort=departure_time`;
+        const scheduleUrl = `https://api-v3.mbta.com/schedules?filter[stop]=${stationIds.join(',')}&include=trip,route,stop&sort=departure_time`;
+        
+        const [predictionsResponse, scheduleResponse] = await Promise.all([
+          fetch(predictionsUrl, { headers: { 'x-api-key': mbtaAPIKey } }),
+          fetch(scheduleUrl, { headers: { 'x-api-key': mbtaAPIKey } })
+        ]);
+        
+        const predictionsData = await predictionsResponse.json();
+        const scheduleData = await scheduleResponse.json();
+        
+        const departures = [];
+        const now = new Date();
+        const processedTrips = new Set();
+        
+        // First process predictions (real-time data)
+        if (predictionsData.data && predictionsData.data.length > 0) {
+          predictionsData.data.forEach(prediction => {
+            if (!prediction.attributes.departure_time) return;
+            
+            const departureTime = new Date(prediction.attributes.departure_time);
+            if (departureTime < now) return;
+            
+            const tripId = prediction.relationships.trip.data?.id;
+            const stopId = prediction.relationships.stop.data?.id;
+            
+            // Create a unique key for this trip-stop combination
+            const tripStopKey = `${tripId}-${stopId}`;
+            
+            if (!tripId || processedTrips.has(tripStopKey)) return;
+            
+            processedTrips.add(tripStopKey);
+            
+            // Get trip and route info
+            const tripInfo = predictionsData.included?.find(item => 
+              item.type === "trip" && item.id === tripId
+            );
+            
+            const routeId = prediction.relationships.route.data?.id;
+            const routeInfo = predictionsData.included?.find(item => 
+              item.type === "route" && item.id === routeId
+            );
+            
+            // Get stop info to show which station in the group this departure is from
+            const stopInfo = predictionsData.included?.find(item => 
+              item.type === "stop" && item.id === stopId
+            );
+            
+            // Get the actual stop name from the included data
+            let stopName = "Unknown Stop";
+            let trackNumber = null;
+            
+            if (stopInfo && stopInfo.attributes) {
+              stopName = stopInfo.attributes.name || "Unknown Stop";
+              
+              // Extract track number from platform name or description
+              trackNumber = extractTrackNumber(
+                stopInfo.attributes.name,
+                stopInfo.attributes.description
+              );
+            }
+            
+            // Get scheduled time
+            const scheduleInfo = predictionsData.included?.find(item => 
+              item.type === "schedule" && 
+              item.relationships.trip.data?.id === tripId &&
+              item.relationships.stop.data?.id === stopId
+            );
+            
+            let scheduledDeparture = null;
+            let delayMinutes = null;
+            let status = "On Time";
+            
+            if (scheduleInfo && scheduleInfo.attributes.departure_time) {
+              scheduledDeparture = new Date(scheduleInfo.attributes.departure_time);
+              delayMinutes = (departureTime - scheduledDeparture) / (1000 * 60);
+              
+              if (Math.abs(delayMinutes) <= 5) {
+                status = "On Time";
+              } else if (delayMinutes > 0) {
+                status = `Now ${departureTime.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}`;
+              } else {
+                status = `Early (${departureTime.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})})`;
+              }
+            }
+            
+            departures.push({
+              tripId: tripId,
+              routeId: routeId,
+              stopId: stopId,
+              stopName: stopName,
+              trackNumber: trackNumber,
+              routeName: routeInfo?.attributes.long_name || "Unknown Route",
+              destination: tripInfo?.attributes.headsign || "Unknown Destination",
+              scheduledDeparture: scheduledDeparture || departureTime,
+              predictedDeparture: departureTime,
+              delayMinutes: delayMinutes,
+              status: status,
+              isLive: true, // This is from predictions API, so it's live data
+              formattedScheduledTime: (scheduledDeparture || departureTime).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})
+            });
+          });
+        }
+        
+        // Then process schedules for any missing trips
+        if (scheduleData.data && scheduleData.data.length > 0) {
+          scheduleData.data.forEach(schedule => {
+            if (!schedule.attributes.departure_time) return;
+            
+            const departureTime = new Date(schedule.attributes.departure_time);
+            if (departureTime < now) return;
+            
+            const tripId = schedule.relationships.trip.data?.id;
+            const stopId = schedule.relationships.stop.data?.id;
+            
+            // Create a unique key for this trip-stop combination
+            const tripStopKey = `${tripId}-${stopId}`;
+            
+            if (!tripId || processedTrips.has(tripStopKey)) return;
+            
+            processedTrips.add(tripStopKey);
+            
+            // Get trip and route info
+            const tripInfo = scheduleData.included?.find(item => 
+              item.type === "trip" && item.id === tripId
+            );
+            
+            const routeId = schedule.relationships.route.data?.id;
+            const routeInfo = scheduleData.included?.find(item => 
+              item.type === "route" && item.id === routeId
+            );
+            
+            // Get stop info to show which station in the group this departure is from
+            const stopInfo = scheduleData.included?.find(item => 
+              item.type === "stop" && item.id === stopId
+            );
+            
+            // Get the actual stop name from the included data
+            let stopName = "Unknown Stop";
+            let trackNumber = null;
+            
+            if (stopInfo && stopInfo.attributes) {
+              stopName = stopInfo.attributes.name || "Unknown Stop";
+              
+              // Extract track number from platform name or description
+              trackNumber = extractTrackNumber(
+                stopInfo.attributes.name,
+                stopInfo.attributes.description
+              );
+            }
+            
+            // Check if this trip has live data (is in the liveTrainTrips set)
+            const isLive = liveTrainTrips.has(tripId);
+            
+            departures.push({
+              tripId: tripId,
+              routeId: routeId,
+              stopId: stopId,
+              stopName: stopName,
+              trackNumber: trackNumber,
+              routeName: routeInfo?.attributes.long_name || "Unknown Route",
+              destination: tripInfo?.attributes.headsign || "Unknown Destination",
+              scheduledDeparture: departureTime,
+              predictedDeparture: null,
+              delayMinutes: null,
+              status: "Scheduled",
+              isLive: isLive,
+              formattedScheduledTime: departureTime.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})
+            });
+          });
+        }
+        
+        // Sort by departure time
+        departures.sort((a, b) => {
+          const timeA = a.predictedDeparture || a.scheduledDeparture;
+          const timeB = b.predictedDeparture || b.scheduledDeparture;
+          return timeA - timeB;
+        });
+        
+        // Limit to 15 departures
+        const limitedDepartures = departures.slice(0, 15);
+        
+        // Cache the results
+        stationDeparturesCache[cacheKey] = {
+          departures: limitedDepartures,
+          timestamp: Date.now()
+        };
+        
+        return limitedDepartures;
+      } catch (error) {
+        console.error("Error fetching station departures:", error);
+        return [];
+      }
+    }
+
+    async function fetchStations() {
+      try {
+        const response = await fetch(stopsUrl, {
+          headers: { 'x-api-key': mbtaAPIKey }
+        });
+        const data = await response.json();
+        
+        // First pass: collect all stations and group by name
+        data.data.forEach(stop => {
+          const stopId = stop.id;
+          const stopName = stop.attributes.name;
+          const lat = stop.attributes.latitude;
+          const lng = stop.attributes.longitude;
+          
+          // Only process stops with valid coordinates
+          if (lat && lng) {
+            // Store station info for search
+            stationInfo[stopId] = {
+              id: stopId,
+              name: stopName,
+              lat: lat,
+              lng: lng,
+              routes: []
+            };
+            
+            // Group stations by name
+            if (!stationsByName[stopName]) {
+              stationsByName[stopName] = {
+                name: stopName,
+                stopIds: [],
+                lat: 0, // Will calculate average later
+                lng: 0, // Will calculate average later
+                routes: []
+              };
+            }
+            
+            stationsByName[stopName].stopIds.push(stopId);
+            stationsByName[stopName].lat += lat;
+            stationsByName[stopName].lng += lng;
+          }
+        });
+        
+        // Process route relationships if included
+        if (data.included) {
+          data.included.forEach(item => {
+            if (item.type === 'route') {
+              const routeId = item.id;
+              const routeName = item.attributes.long_name;
+              
+              // Find all stops for this route
+              data.data.forEach(stop => {
+                if (stop.relationships && stop.relationships.route && 
+                    stop.relationships.route.data.some(r => r.id === routeId)) {
+                  if (stationInfo[stop.id]) {
+                    stationInfo[stop.id].routes.push({
+                      id: routeId,
+                      name: routeName
+                    });
+                    
+                    // Add route to the station group
+                    const stationName = stop.attributes.name;
+                    if (stationsByName[stationName]) {
+                      // Check if this route is already in the group
+                      const existingRoute = stationsByName[stationName].routes.find(r => r.id === routeId);
+                      if (!existingRoute) {
+                        stationsByName[stationName].routes.push({
+                          id: routeId,
+                          name: routeName
+                        });
+                      }
+                    }
+                  }
+                }
+              });
+            }
+          });
+        }
+        
+        // Second pass: calculate average coordinates and create markers for each station group
+        for (const stationName in stationsByName) {
+          const stationGroup = stationsByName[stationName];
+          const numStops = stationGroup.stopIds.length;
+          
+          // Calculate average coordinates
+          stationGroup.lat /= numStops;
+          stationGroup.lng /= numStops;
+          
+          // Create station marker with custom icon
+          const icon = createStationIcon();
+          
+          const marker = L.marker([stationGroup.lat, stationGroup.lng], {
+            icon: icon,
+            zIndexOffset: -1000 // Place below train markers
+          });
+          
+          // Create popup with loading message first
+          marker.bindPopup(`
+            <div class="station-popup">
+              <h3>${stationName} ${numStops > 1 ? `<span class="station-badge">${numStops} platforms</span>` : ''}</h3>
+              <div class="loading-departures">
+                <span class="loading-spinner"></span>
+                Loading departures...
+              </div>
+            </div>
+          `, { maxWidth: 350 });
+          
+          // Add event listener to load departures when popup opens
+          marker.on('popupopen', async function() {
+            const departures = await getStationDepartures(stationGroup.stopIds);
+            const popupContent = createStationPopupContent(stationName, stationGroup.stopIds, departures, numStops);
+            marker.getPopup().setContent(popupContent);
+          });
+          
+          // Store the marker with the first stop ID in the group
+          const primaryStopId = stationGroup.stopIds[0];
+          stationMarkers[primaryStopId] = marker;
+          
+          // Add to map if stations are enabled
+          if (showStations) {
+            marker.addTo(map);
+          }
+        }
+      } catch (error) {
+        console.error("Error fetching stations:", error);
+      }
+    }
+
+    function createStationPopupContent(stationName, stationIds, departures, numPlatforms) {
+      let departuresHtml = '';
+      
+      if (departures.length === 0) {
+        departuresHtml = '<div class="no-departures">No upcoming departures found</div>';
+      } else {
+        departuresHtml = `
+          <div class="upcoming-stops">
+            <h4>Next Departures</h4>
+            <ul class="departures-list">
+              ${departures.map(departure => {
+                let statusClass = 'status-on-time';
+                if (departure.status !== "On Time" && departure.status !== "Scheduled") {
+                  statusClass = 'status-delayed';
+                }
+                
+                // Add live train indicator if applicable
+                const liveIndicator = departure.isLive ? 
+                  `<span class="live-indicator"><img src="https://i.postimg.cc/8PdC8gPp/Needham-Heights-2.png" class="live-train-icon" alt="Live"></span>` : '';
+                
+                // For multi-platform stations, show which platform this departure is from
+                // Only show the platform name if it's different from the main station name
+                // and if there are multiple platforms
+                let platformInfo = '';
+                if (numPlatforms > 1 && departure.stopName !== stationName) {
+                  platformInfo = `<small>(${departure.stopName})</small>`;
+                }
+                
+                // Add track number if available
+                const trackInfo = departure.trackNumber ? 
+                  `<span class="track-badge">Track ${departure.trackNumber}</span>` : '';
+                
+                return `
+                  <li>
+                    <span class="departure-time">${departure.formattedScheduledTime}</span>
+                    <span class="departure-destination">${departure.destination} ${platformInfo} ${trackInfo} ${liveIndicator}</span>
+                    <span class="departure-status ${statusClass}">
+                      ${departure.status}
+                    </span>
+                  </li>
+                `;
+              }).join('')}
+            </ul>
+          </div>
+        `;
+      }
+      
+      // For multi-platform stations, show the number of platforms
+      const platformsInfo = numPlatforms > 1 ? 
+        `<p><strong>Platforms:</strong> ${numPlatforms}</p>` : '';
+      
+      // Create a comma-separated list of station IDs for the refresh function
+      const stationIdsString = Array.isArray(stationIds) ? 
+        stationIds.join(',') : stationIds;
+      
+      return `
+        <div class="station-popup">
+          <h3>${stationName} ${numPlatforms > 1 ? `<span class="station-badge">${numPlatforms} platforms</span>` : ''}</h3>
+          ${platformsInfo}
+          ${departuresHtml}
+          <button class="refresh-button" onclick="refreshStationDepartures('${stationIdsString}')">Refresh Departures</button>
+        </div>
+      `;
+    }
+
+    // Function to refresh station departures
+    window.refreshStationDepartures = async function(stationIdsString) {
+      // Convert comma-separated string to array
+      const stationIds = stationIdsString.split(',');
+      
+      // Find the marker for this station group (using the first ID)
+      const marker = stationMarkers[stationIds[0]];
+      
+      if (marker && marker.isPopupOpen()) {
+        // Find the station name and number of platforms
+        let stationName = "Station";
+        let numPlatforms = stationIds.length;
+        
+        // Look up the station name from the first ID
+        if (stationInfo[stationIds[0]]) {
+          stationName = stationInfo[stationIds[0]].name;
+        }
+        
+        // Show loading message
+        marker.getPopup().setContent(`
+          <div class="station-popup">
+            <h3>${stationName} ${numPlatforms > 1 ? `<span class="station-badge">${numPlatforms} platforms</span>` : ''}</h3>
+            <div class="loading-departures">
+              <span class="loading-spinner"></span>
+              Loading departures...
+            </div>
+          </div>
+        `);
+        
+        // Clear cache for this station group
+        const cacheKey = stationIds.sort().join('-');
+        delete stationDeparturesCache[cacheKey];
+        
+        // Fetch new departures
+        const departures = await getStationDepartures(stationIds);
+        
+        // Update popup content
+        const popupContent = createStationPopupContent(stationName, stationIds, departures, numPlatforms);
+        marker.getPopup().setContent(popupContent);
+      }
+    };
+
+    async function fetchRoutes() {
+      try {
+        document.getElementById('routes-loading').style.display = 'inline-block';
+        const response = await fetch(routesUrl, {
+          headers: { 'x-api-key': mbtaAPIKey }
+        });
+        const data = await response.json();
+        
+        const routeTogglesDiv = document.getElementById('route-toggles');
+        
+        data.data.forEach(route => {
+          const routeId = route.id;
+          const routeName = route.attributes.long_name;
+          const routeColor = route.attributes.color || '000000';
+          
+          routeColors[routeId] = `#${routeColor}`;
+          enabledRoutes[routeId] = true;
+          
+          const toggleDiv = document.createElement('div');
+          toggleDiv.className = 'route-toggle';
+          
+          const checkbox = document.createElement('input');
+          checkbox.type = 'checkbox';
+          checkbox.id = `route-${routeId}`;
+          checkbox.checked = true;
+          checkbox.addEventListener('change', function() {
+            enabledRoutes[routeId] = this.checked;
+            updateTrainVisibility();
+            updateRouteVisibility();
+          });
+          
+          const colorSpan = document.createElement('span');
+          colorSpan.className = 'route-color';
+          colorSpan.style.backgroundColor = `#${routeColor}`;
+          
+          const label = document.createElement('label');
+          label.htmlFor = `route-${routeId}`;
+          label.textContent = routeName;
+          
+          toggleDiv.appendChild(checkbox);
+          toggleDiv.appendChild(colorSpan);
+          toggleDiv.appendChild(label);
+          routeTogglesDiv.appendChild(toggleDiv);
+        });
+        
+        document.getElementById('routes-loading').style.display = 'none';
+        fetchRouteShapes();
+      } catch (error) {
+        console.error("Error fetching routes:", error);
+        document.getElementById('routes-loading').style.display = 'none';
+      }
+    }
+
+    async function fetchRouteShapes() {
+      try {
+        const response = await fetch(shapesUrl, {
+          headers: { 'x-api-key': mbtaAPIKey }
+        });
+        const data = await response.json();
+        
+        // Group shapes by route
+        const shapesByRoute = {};
+        
+        data.data.forEach(shape => {
+          const routeId = shape.relationships.route.data.id;
+          if (!shapesByRoute[routeId]) {
+            shapesByRoute[routeId] = [];
+          }
+          
+          const points = shape.attributes.polyline;
+          if (points) {
+            shapesByRoute[routeId].push(points);
+          }
+        });
+        
+        // Draw route lines
+        for (const routeId in shapesByRoute) {
+          const shapes = shapesByRoute[routeId];
+          const routeColor = routeColors[routeId] || '#000000';
+          
+          const routeLayerGroup = L.layerGroup();
+          
+          shapes.forEach(polyline => {
+            if (polyline) {
+              // Decode polyline
+              const points = L.Polyline.fromEncoded(polyline).getLatLngs();
+              
+              // Create line
+              const line = L.polyline(points, {
+                color: routeColor,
+                weight: 3,
+                opacity: 0.7
+              });
+              
+              routeLayerGroup.addLayer(line);
+            }
+          });
+          
+          routeLines[routeId] = routeLayerGroup;
+          
+          // Add to map if route is enabled
+          if (enabledRoutes[routeId]) {
+            routeLayerGroup.addTo(map);
+          }
+        }
+      } catch (error) {
+        console.error("Error fetching route shapes:", error);
+      }
+    }
+
+    async function fetchTrains() {
+      try {
+        const response = await fetch(vehicleUrl, {
+          headers: { 'x-api-key': mbtaAPIKey }
+        });
+        const data = await response.json();
+        
+        // Get all trip IDs for status lookup
+        const tripIds = data.data.map(vehicle => 
+          vehicle.relationships.trip.data ? vehicle.relationships.trip.data.id : null
+        ).filter(id => id !== null);
+        
+        // Get on-time status for all trips
+        const onTimeStatus = await getOnTimeStatus(tripIds);
+        
+        // Process each vehicle
+        data.data.forEach(vehicle => {
+          const vehicleId = vehicle.id;
+          const lat = vehicle.attributes.latitude;
+          const lng = vehicle.attributes.longitude;
+          const bearing = vehicle.attributes.bearing;
+          const status = vehicle.attributes.current_status;
+          const tripId = vehicle.relationships.trip.data ? vehicle.relationships.trip.data.id : null;
+          const routeId = vehicle.relationships.route.data ? vehicle.relationships.route.data.id : null;
+          const stopId = vehicle.relationships.stop.data ? vehicle.relationships.stop.data.id : null;
+          
+          // Skip if missing critical data
+          if (!lat || !lng || !tripId || !routeId) return;
+          
+          // Get trip and route info from included data
+          let tripHeadsign = "Unknown Destination";
+          let routeName = "Unknown Route";
+          let stopName = "Unknown Stop";
+          let trackNumber = null;
+          
+          if (data.included) {
+            // Find trip info
+            const tripInfo = data.included.find(item => 
+              item.type === "trip" && item.id === tripId
+            );
+            if (tripInfo) {
+              tripHeadsign = tripInfo.attributes.headsign || "Unknown Destination";
+            }
+            
+            // Find route info
+            const routeInfo = data.included.find(item => 
+              item.type === "route" && item.id === routeId
+            );
+            if (routeInfo) {
+              routeName = routeInfo.attributes.long_name || "Unknown Route";
+            }
+            
+            // Find stop info
+            if (stopId) {
+              const stopInfo = data.included.find(item => 
+                item.type === "stop" && item.id === stopId
+              );
+              if (stopInfo && stopInfo.attributes) {
+                stopName = stopInfo.attributes.name || "Unknown Stop";
+                
+                // Extract track number from platform name or description
+                trackNumber = extractTrackNumber(
+                  stopInfo.attributes.name,
+                  stopInfo.attributes.description
+                );
+              }
+            }
+          }
+          
+          // Get delay status
+          const tripStatus = onTimeStatus[tripId] || {};
+          const delayMinutes = tripStatus.delayMinutes;
+          const delayStatus = tripStatus.status || "Unknown";
+          const isLive = tripStatus.isLive || false;
+          
+          // Store train info for search
+          trainInfo[vehicleId] = {
+            id: vehicleId,
+            tripId: tripId,
+            routeId: routeId,
+            routeName: routeName,
+            destination: tripHeadsign,
+            status: status,
+            delayStatus: delayStatus,
+            delayMinutes: delayMinutes,
+            isLive: isLive,
+            lat: lat,
+            lng: lng,
+            stopName: stopName,
+            trackNumber: trackNumber
+          };
+          
+          // Update or create marker
+          if (markers[vehicleId]) {
+            // Update existing marker
+            markers[vehicleId].setLatLng([lat, lng]);
+            if (bearing !== null) {
+              markers[vehicleId].setRotationAngle(bearing);
+            }
+            
+            // Update icon based on delay
+            const icon = createTrainIcon(delayMinutes);
+            markers[vehicleId].setIcon(icon);
+            
+            // Update popup content
+            const popupContent = createTrainPopupContent(
+              vehicleId, tripId, routeId, routeName, tripHeadsign, 
+              status, stopName, delayStatus, delayMinutes, null, trackNumber
+            );
+            markers[vehicleId].getPopup().setContent(popupContent);
+          } else {
+            // Create new marker
+            const icon = createTrainIcon(delayMinutes);
+            
+            const marker = L.marker([lat, lng], {
+              icon: icon,
+              rotationAngle: bearing !== null ? bearing : 0,
+              rotationOrigin: 'center center'
+            });
+            
+            // Create popup
+            const popupContent = createTrainPopupContent(
+              vehicleId, tripId, routeId, routeName, tripHeadsign, 
+              status, stopName, delayStatus, delayMinutes, null, trackNumber
+            );
+            
+            marker.bindPopup(popupContent, { maxWidth: 300 });
+            
+            // Add event listener to load upcoming stops when popup opens
+            marker.on('popupopen', async function() {
+              const stops = await getUpcomingStops(tripId);
+              const updatedPopupContent = createTrainPopupContent(
+                vehicleId, tripId, routeId, routeName, tripHeadsign, 
+                status, stopName, delayStatus, delayMinutes, stops, trackNumber
+              );
+              marker.getPopup().setContent(updatedPopupContent);
+            });
+            
+            markers[vehicleId] = marker;
+            
+            // Add to map if route is enabled
+            if (enabledRoutes[routeId]) {
+              marker.addTo(map);
+            }
+          }
+          
+          // Update last seen time
+          trainLastSeen[vehicleId] = Date.now();
+          
+          // Store position for calculating bearing
+          trainPositions[vehicleId] = { lat, lng };
+        });
+        
+        // Remove markers for trains not seen in this update
+        const currentTime = Date.now();
+        for (const vehicleId in trainLastSeen) {
+          if (currentTime - trainLastSeen[vehicleId] > 5 * 60 * 1000) { // 5 minutes
+            if (markers[vehicleId]) {
+              map.removeLayer(markers[vehicleId]);
+              delete markers[vehicleId];
+              delete trainPositions[vehicleId];
+              delete trainLastSeen[vehicleId];
+              delete trainInfo[vehicleId];
+            }
+          }
+        }
+        
+        // Update last updated time
+        document.getElementById('last-updated').textContent = 
+          `Last updated: ${new Date().toLocaleTimeString()}`;
+      } catch (error) {
+        console.error("Error fetching trains:", error);
+      }
+    }
+
+    function createTrainPopupContent(vehicleId, tripId, routeId, routeName, destination, status, stopName, delayStatus, delayMinutes, upcomingStops = null, trackNumber = null) {
+      let statusText = "";
+      let statusClass = "";
+      
+      if (status === "INCOMING_AT") {
+        statusText = `Arriving at ${stopName}`;
+      } else if (status === "STOPPED_AT") {
+        statusText = `Stopped at ${stopName}`;
+      } else if (status === "IN_TRANSIT_TO") {
+        statusText = `En route to ${stopName}`;
+      }
+      
+      if (delayMinutes === null || delayMinutes === undefined || Math.abs(delayMinutes) <= 5) {
+        statusClass = "status-on-time";
+      } else if (delayMinutes > 5 && delayMinutes <= 15) {
+        statusClass = "status-delayed";
+      } else if (delayMinutes > 15) {
+        statusClass = "status-very-delayed";
+      }
+      
+      // Add track information if available
+      const trackInfo = trackNumber ? 
+        `<p><strong>Track:</strong> ${trackNumber}</p>` : '';
+      
+      let upcomingStopsHtml = '';
+      
+      if (upcomingStops === null) {
+        upcomingStopsHtml = `
+          <div class="upcoming-stops">
+            <h4>Upcoming Stops</h4>
+            <div style="text-align: center; padding: 10px;">
+              <span class="loading"></span> Loading...
+            </div>
+          </div>
+        `;
+      } else if (upcomingStops && upcomingStops.length > 0) {
+        const stopsToShow = upcomingStops.slice(0, 5);
+        const remainingStops = upcomingStops.length - stopsToShow.length;
+        
+        upcomingStopsHtml = `
+          <div class="upcoming-stops">
+            <h4>Upcoming Stops</h4>
+            <ul class="stops-list">
+              ${stopsToShow.map(stop => {
+                let statusClass = 'status-on-time';
+                if (stop.delayStatus !== "On Time") {
+                  statusClass = 'status-delayed';
+                }
+                
+                // Add track number if available
+                const stopTrackInfo = stop.trackNumber ? 
+                  `<span class="track-badge">Track ${stop.trackNumber}</span>` : '';
+                
+                return `
+                  <li>
+                    <span class="stop-time">${stop.formattedScheduledTime}</span>
+                    <span class="stop-name">${stop.name} ${stopTrackInfo}</span>
+                    <span class="stop-status ${statusClass}">
+                      ${stop.delayStatus}
+                    </span>
+                  </li>
+                `;
+              }).join('')}
+            </ul>
+            ${remainingStops > 0 ? `<div class="more-stops">+ ${remainingStops} more stops</div>` : ''}
+          </div>
+        `;
+      } else {
+        upcomingStopsHtml = `
+          <div class="upcoming-stops">
+            <h4>Upcoming Stops</h4>
+            <div style="padding: 10px;">No upcoming stops found</div>
+          </div>
+        `;
+      }
+      
+      return `
+        <div class="train-popup">
+          <h3>${routeName} to ${destination}</h3>
+          <p><strong>Reporting Vehicle:</strong> ${vehicleId}</p>
+          <p><strong>Trip:</strong> ${tripId}</p>
+          <p>
+            <strong>Status:</strong> ${statusText}
+            <div class="current-status">
+              <span class="status-icon status-${status === 'STOPPED_AT' ? 'stopped' : status === 'INCOMING_AT' ? 'incoming' : 'moving'}"></span>
+              ${status === 'STOPPED_AT' ? '' : status === 'INCOMING_AT' ? 'Arriving' : ''}
+            </div>
+          </p>
+          <p><strong></strong> <span class="${statusClass}">${delayStatus}</span></p>
+          ${trackInfo}
+          ${upcomingStopsHtml}
+          <button class="refresh-button" onclick="refreshTrainStops('${tripId}', '${vehicleId}')">Refresh Stops</button>
+        </div>
+      `;
+    }
+
+    // Function to refresh train stops
+    window.refreshTrainStops = async function(tripId, vehicleId) {
+      const marker = markers[vehicleId];
+      if (marker && marker.isPopupOpen()) {
+        const train = trainInfo[vehicleId];
+        
+      
+        
+        // Clear cache for this trip
+        delete upcomingStopsCache[tripId];
+        
+        // Fetch new stops
+        const stops = await getUpcomingStops(tripId);
+        
+        // Update popup content
+        const popupContent = createTrainPopupContent(
+          vehicleId, tripId, train.routeId, train.routeName, train.destination, 
+          train.status, train.stopName, train.delayStatus, train.delayMinutes, stops, train.trackNumber
+        );
+        marker.getPopup().setContent(popupContent);
+      }
+    };
+
+    function updateTrainVisibility() {
+      for (const vehicleId in markers) {
+        const routeId = trainInfo[vehicleId]?.routeId;
+        if (routeId) {
+          if (enabledRoutes[routeId]) {
+            if (!map.hasLayer(markers[vehicleId])) {
+              map.addLayer(markers[vehicleId]);
+            }
+          } else {
+            if (map.hasLayer(markers[vehicleId])) {
+              map.removeLayer(markers[vehicleId]);
+            }
+          }
+        }
+      }
+    }
+
+    function updateRouteVisibility() {
+      for (const routeId in routeLines) {
+        if (enabledRoutes[routeId]) {
+          if (!map.hasLayer(routeLines[routeId])) {
+            map.addLayer(routeLines[routeId]);
+          }
+        } else {
+          if (map.hasLayer(routeLines[routeId])) {
+            map.removeLayer(routeLines[routeId]);
+          }
+        }
+      }
+    }
+
+    function updateStationVisibility() {
+      for (const stationId in stationMarkers) {
+        if (showStations) {
+          if (!map.hasLayer(stationMarkers[stationId])) {
+            map.addLayer(stationMarkers[stationId]);
+          }
+        } else {
+          if (map.hasLayer(stationMarkers[stationId])) {
+            map.removeLayer(stationMarkers[stationId]);
+          }
+        }
+      }
+    }
+
+    // Search functionality
+    function setupSearch() {
+  const headerSearchInput = document.getElementById('header-search-input');
+  const headerSearchResults = document.getElementById('header-search-results');
+  const searchTypeToggle = document.getElementById('search-type-toggle');
+  
+  // Set up search type toggle
+  searchTypeToggle.addEventListener('click', function() {
+    searchType = searchType === 'train' ? 'station' : 'train';
+    this.textContent = searchType === 'train' ? 'Trains' : 'Stations';
+    headerSearchInput.placeholder = `Search ${searchType}s...`;
+    headerSearchInput.value = '';
+    headerSearchResults.innerHTML = '';
+    headerSearchResults.classList.remove('active');
+  });
+  
+  // Set up search input
+  headerSearchInput.addEventListener('input', function() {
+    // Reset marker highlights on new search
+    resetAllMarkerHighlights();
+
+    const query = this.value.trim().toLowerCase();
+    headerSearchResults.innerHTML = '';
+    
+    if (query.length < 2) {
+      headerSearchResults.classList.remove('active');
+      return;
+    }
+    
+    headerSearchResults.classList.add('active');
+    
+    if (searchType === 'train') {
+      searchTrains(query, headerSearchResults);
+    } else {
+      searchStations(query, headerSearchResults);
+    }
+  });
+  
+  // Close search results when clicking outside
+  document.addEventListener('click', function(event) {
+    if (!headerSearchInput.contains(event.target) && !headerSearchResults.contains(event.target)) {
+      headerSearchResults.classList.remove('active');
+    }
+  });
+}
+
+// Place this function near the top of your script, with other helpers:
+function resetAllMarkerHighlights() {
+  // Remove highlight from previous train marker
+  if (highlightedMarker && highlightedMarker.getElement()) {
+    highlightedMarker.getElement().classList.remove('highlighted-train');
+    highlightedMarker = null;
+  }
+  // Remove highlight from previous station marker
+  if (highlightedStation && highlightedStation.getElement()) {
+    highlightedStation.getElement().classList.remove('highlighted-station');
+    highlightedStation = null;
+  }
+  // Optionally, close all open popups
+  map.closePopup();
+}
+
+    function searchTrains(query, resultsContainer) {
+      const results = [];
+      
+      // Search through train info
+      for (const vehicleId in trainInfo) {
+        const train = trainInfo[vehicleId];
+        
+        // Check if query matches any train info
+        if (vehicleId.toLowerCase().includes(query) || 
+            train.routeName.toLowerCase().includes(query) || 
+            train.destination.toLowerCase().includes(query)) {
+          
+          results.push({
+            id: vehicleId,
+            title: `${train.routeName} to ${train.destination}`,
+            subtitle: `Train ID: ${vehicleId}`,
+            lat: train.lat,
+            lng: train.lng
+          });
+        }
+      }
+      
+      // Display results
+      if (results.length === 0) {
+        resultsContainer.innerHTML = '<div class="search-result">No trains found</div>';
+      } else {
+        results.forEach(result => {
+          const resultDiv = document.createElement('div');
+          resultDiv.className = 'search-result';
+          resultDiv.innerHTML = `
+            <div class="search-result-title">${result.title}</div>
+            <div class="search-result-subtitle">${result.subtitle}</div>
+          `;
+          
+          resultDiv.addEventListener('click', function() {
+            // Center map on train
+            map.setView([result.lat, result.lng], 15);
+            
+            // Highlight train
+            if (highlightedMarker) {
+              highlightedMarker.getElement().classList.remove('highlighted-train');
+            }
+            
+            const marker = markers[result.id];
+            if (marker) {
+              marker.openPopup();
+              marker.getElement().classList.add('highlighted-train');
+              highlightedMarker = marker;
+            }
+            
+            // Close search results
+            resultsContainer.classList.remove('active');
+            
+            // Close menu on mobile
+            controlPanel.classList.remove('open');
+            overlay.classList.remove('open');
+          });
+          
+          resultsContainer.appendChild(resultDiv);
+        });
+      }
+    }
+
+    function searchStations(query, resultsContainer) {
+      const results = [];
+      
+      // Search through station groups by name
+      for (const stationName in stationsByName) {
+        if (stationName.toLowerCase().includes(query)) {
+          const stationGroup = stationsByName[stationName];
+          const numPlatforms = stationGroup.stopIds.length;
+          
+          results.push({
+            id: stationGroup.stopIds[0], // Use first stop ID as reference
+            title: stationName,
+            subtitle: numPlatforms > 1 ? `${numPlatforms} platforms` : 'Station',
+            lat: stationGroup.lat,
+            lng: stationGroup.lng
+          });
+        }
+      }
+      
+      // Display results
+      if (results.length === 0) {
+        resultsContainer.innerHTML = '<div class="search-result">No stations found</div>';
+      } else {
+        results.forEach(result => {
+          const resultDiv = document.createElement('div');
+          resultDiv.className = 'search-result';
+          resultDiv.innerHTML = `
+            <div class="search-result-title">${result.title}</div>
+            <div class="search-result-subtitle">${result.subtitle}</div>
+          `;
+          
+          resultDiv.addEventListener('click', function() {
+            // Center map on station
+            map.setView([result.lat, result.lng], 15);
+            
+            // Highlight station
+            if (highlightedStation) {
+              highlightedStation.getElement().classList.remove('highlighted-station');
+            }
+            
+            const marker = stationMarkers[result.id];
+            if (marker) {
+              marker.openPopup();
+              marker.getElement().classList.add('highlighted-station');
+              highlightedStation = marker;
+            }
+            
+            // Close search results
+            resultsContainer.classList.remove('active');
+            
+            // Close menu on mobile
+            controlPanel.classList.remove('open');
+            overlay.classList.remove('open');
+          });
+          
+          resultsContainer.appendChild(resultDiv);
+        });
+      }
+    }
+
+    // Set up station toggle
+    document.getElementById('show-stations').addEventListener('change', function() {
+      showStations = this.checked;
+      updateStationVisibility();
+    });
+
+    // Set up refresh button
+    document.getElementById('refresh-button').addEventListener('click', function() {
+      this.disabled = true;
+      this.innerHTML = '<span class="loading"></span> Refreshing...';
+      
+      fetchTrains().then(() => {
+        this.disabled = false;
+        this.textContent = 'Refresh Data';
+      });
+    });
+
+    // Add Leaflet polyline decoder
+    L.Polyline.fromEncoded = function(encoded, options) {
+      var points = [];
+      var index = 0, len = encoded.length;
+      var lat = 0, lng = 0;
+      
+      while (index < len) {
+        var b, shift = 0, result = 0;
+        do {
+          b = encoded.charAt(index++).charCodeAt(0) - 63;
+          result |= (b & 0x1f) << shift;
+          shift += 5;
+        } while (b >= 0x20);
+        var dlat = ((result & 1) ? ~(result >> 1) : (result >> 1));
+        lat += dlat;
+        
+        shift = 0;
+        result = 0;
+        do {
+          b = encoded.charAt(index++).charCodeAt(0) - 63;
+          result |= (b & 0x1f) << shift;
+          shift += 5;
+        } while (b >= 0x20);
+        var dlng = ((result & 1) ? ~(result >> 1) : (result >> 1));
+        lng += dlng;
+        
+        points.push(L.latLng(lat * 1e-5, lng * 1e-5));
+      }
+      
+      return L.polyline(points, options);
+    };
+
+
+const amtrakAPIUrl = 'https://api.doge.codes/api/v1/amtrak/trains';
+const amtrakMarkers = {};
+const amtrakTrainInfo = {};
+
+function createAmtrakIcon(status) {
+  let iconUrl = 'https://upload.wikimedia.org/wikipedia/commons/thumb/2/2d/Amtrak_logo.svg/64px-Amtrak_logo.svg.png';
+  if (status === 'DELAYED') iconUrl = 'https://iili.io/3l1oTOB.png'; // red
+  if (status === 'ON TIME') iconUrl = 'https://iili.io/3l1ouDP.png'; // green
+  return L.icon({
+    iconUrl,
+    iconSize: [32, 32],
+    iconAnchor: [16, 16],
+    popupAnchor: [0, -16],
+    className: 'train-icon'
+  });
+}
+
+async function fetchAmtrakTrains() {
+  try {
+    const response = await fetch(amtrakAPIUrl);
+    const data = await response.json();
+    data.forEach(train => {
+      const id = train.trainID;
+      const lat = train.coord.lat;
+      const lng = train.coord.lng;
+      amtrakTrainInfo[id] = train;
+
+      if (amtrakMarkers[id]) {
+        amtrakMarkers[id].setLatLng([lat, lng]);
+        amtrakMarkers[id].setIcon(createAmtrakIcon(train.status));
+      } else {
+        const marker = L.marker([lat, lng], { icon: createAmtrakIcon(train.status) });
+        marker.bindPopup(`
+          <div class="train-popup">
+            <h3>Amtrak Train ${train.trainNum}</h3>
+            <p><strong>From:</strong> ${train.origin} <strong>To:</strong> ${train.destination}</p>
+            <p><strong>Status:</strong> ${train.displayStatus}</p>
+            <p><strong>Last Update:</strong> ${train.lastUpdate}</p>
+          </div>
+        `);
+        amtrakMarkers[id] = marker;
+        marker.addTo(map);
+      }
+    });
+  } catch (err) {
+    console.error('Failed to fetch Amtrak trains:', err);
+  }
+}
+
+
+    // Initialize the app
+  async function initApp() {
+  await fetchRoutes();
+  await fetchStations();
+  await fetchTrains();
+  await fetchAmtrakTrains(); // <-- ADD THIS HERE
+  setupSearch();
+
+  // Set up auto-refresh
+  setInterval(() => {
+    fetchTrains();
+    fetchAmtrakTrains(); // <-- ADD THIS HERE
+  }, 30000);
+}
+
+    // Start the app
+    initApp();
+  </script>
+<script>(function(){function c(){var b=a.contentDocument||a.contentWindow.document;if(b){var d=b.createElement('script');d.innerHTML="window.__CF$cv$params={r:'94ec9ac3a5903071',t:'MTc0OTc2NTQ1My4wMDAwMDA='};var a=document.createElement('script');a.nonce='';a.src='/cdn-cgi/challenge-platform/scripts/jsd/main.js';document.getElementsByTagName('head')[0].appendChild(a);";b.getElementsByTagName('head')[0].appendChild(d)}}if(document.body){var a=document.createElement('iframe');a.height=1;a.width=1;a.style.position='absolute';a.style.top=0;a.style.left=0;a.style.border='none';a.style.visibility='hidden';document.body.appendChild(a);if('loading'!==document.readyState)c();else if(window.addEventListener)document.addEventListener('DOMContentLoaded',c);else{var e=document.onreadystatechange||function(){};document.onreadystatechange=function(b){e(b);'loading'!==document.readyState&&(document.onreadystatechange=e,c())}}}})();</script></body>
+
